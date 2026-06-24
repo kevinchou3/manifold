@@ -281,8 +281,10 @@ export interface FDMatch {
 
 // Maps football-data.org area codes / TLAs that differ from ISO 3166-1 alpha-2
 const FD_CODE_TO_ISO2: Record<string, string> = {
-  // UK nations
-  ENG: 'GB', SCO: 'GB', WAL: 'GB', NIR: 'GB',
+  // UK home nations: England/Scotland/Wales have their own subdivision flag
+  // emoji (see FD_CODE_TO_SUBDIVISION). Northern Ireland has no flag emoji, so
+  // it falls back to the Union Jack.
+  NIR: 'GB',
   // TLA → ISO2 for all 48 WC 2026 teams + common extras
   MEX: 'MX', USA: 'US', CAN: 'CA', BRA: 'BR', ARG: 'AR', FRA: 'FR',
   ESP: 'ES', GER: 'DE', POR: 'PT', NED: 'NL', BEL: 'BE', ITA: 'IT',
@@ -296,7 +298,7 @@ const FD_CODE_TO_ISO2: Record<string, string> = {
   KSA: 'SA', KUW: 'KW', IRQ: 'IQ', JOR: 'JO', LBN: 'LB', SYR: 'SY',
   CRO: 'HR', SRB: 'RS', SVK: 'SK', SVN: 'SI', HUN: 'HU', ROU: 'RO',
   GRE: 'GR', TUR: 'TR', UKR: 'UA', POL: 'PL', CZE: 'CZ', AUT: 'AT',
-  SWE: 'SE', NOR: 'NO', DEN: 'DK', SUI: 'CH', SCT: 'GB', FIN: 'FI',
+  SWE: 'SE', NOR: 'NO', DEN: 'DK', SUI: 'CH', FIN: 'FI',
   BIH: 'BA', MKD: 'MK', ALB: 'AL', ISL: 'IS', IRL: 'IE',
   CPV: 'CV', CUR: 'CW',
   // ISO 3166-1 alpha-3 / FIFA variants — football-data returns the SAME team
@@ -315,17 +317,59 @@ export function flagEmoji(iso2: string): string {
     .join('')
 }
 
+// England/Scotland/Wales are the only UK home nations with a real flag emoji: an
+// ISO 3166-2 subdivision flag (a "tag sequence", not a regional-indicator pair).
+// football-data delivers them under these area codes / TLAs, so map to the
+// subdivision and let teamFlagFromArea build the emoji. (Northern Ireland has no
+// flag emoji and stays mapped to GB in FD_CODE_TO_ISO2.)
+const FD_CODE_TO_SUBDIVISION: Record<string, string> = {
+  ENG: 'gbeng',
+  SCO: 'gbsct',
+  SCT: 'gbsct',
+  WAL: 'gbwls',
+  WLS: 'gbwls',
+}
+
+// Build a subdivision flag emoji from its ISO 3166-2 letters, e.g. "gbsct" →
+// 🏴󠁧󠁢󠁳󠁣󠁴󠁿: a black-flag base, one tag character per letter, then a cancel tag.
+function subdivisionFlagEmoji(code: string): string {
+  const BLACK_FLAG = 0x1f3f4
+  const TAG_BASE = 0xe0000
+  const CANCEL_TAG = 0xe007f
+  return (
+    String.fromCodePoint(BLACK_FLAG) +
+    [...code].map((c) => String.fromCodePoint(TAG_BASE + c.charCodeAt(0))).join('') +
+    String.fromCodePoint(CANCEL_TAG)
+  )
+}
+
 export function teamFlagFromArea(areaCode: string): string {
+  const subdivision = FD_CODE_TO_SUBDIVISION[areaCode]
+  if (subdivision) return subdivisionFlagEmoji(subdivision)
   const iso2 = FD_CODE_TO_ISO2[areaCode] ?? areaCode
   return flagEmoji(iso2)
 }
 
-// Reverse of flagEmoji: turns a regional-indicator flag emoji back into its
-// lowercase ISO 3166-1 alpha-2 code (e.g. "🇰🇷" → "kr"), or '' if not a flag.
+// Reverse of the flag builders: turns a flag emoji into its lowercase flagcdn
+// code — a regional-indicator pair → ISO2 ("🇰🇷" → "kr"), or a subdivision tag
+// sequence → hyphenated ISO 3166-2 ("🏴󠁧󠁢󠁳󠁣󠁴󠁿" → "gb-sct"). Returns '' if not a flag.
 // Lets the UI render a cross-platform flag IMAGE instead of relying on the OS to
 // draw the emoji — Windows/Chrome render flag emoji as the bare letters ("KR").
 export function flagEmojiToCode(flag: string): string {
   const cps = [...flag].map((c) => c.codePointAt(0) ?? 0)
+  // Subdivision flag: 🏴 base followed by lowercase tag letters (U+E0061–E007A)
+  // and a cancel tag. ISO 3166-2 is "<country><subdivision>"; flagcdn hyphenates
+  // after the two-letter country (e.g. "gbsct" → "gb-sct").
+  if (cps[0] === 0x1f3f4) {
+    const letters = cps
+      .slice(1)
+      .filter((cp) => cp >= 0xe0061 && cp <= 0xe007a)
+      .map((cp) => String.fromCharCode(cp - 0xe0000))
+      .join('')
+    return letters.length >= 3
+      ? `${letters.slice(0, 2)}-${letters.slice(2)}`
+      : ''
+  }
   if (cps.length !== 2) return ''
   const A = 0x1f1e6
   const Z = 0x1f1ff

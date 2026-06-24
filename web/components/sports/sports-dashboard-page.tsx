@@ -118,16 +118,27 @@ function MarketCardSkeletonGrid() {
 }
 
 function parseAnswerText(text: string): { flag: string; name: string } {
-  const chars = [...text.trim()]
+  const trimmed = text.trim()
+  const chars = [...trimmed]
+  const cpOf = (c?: string) => c?.codePointAt(0)
   const isRegionalIndicator = (c?: string) => {
-    const cp = c?.codePointAt(0)
+    const cp = cpOf(c)
     return cp !== undefined && cp >= 0x1f1e6 && cp <= 0x1f1ff
   }
+  // Country flag: a regional-indicator pair, e.g. 🇧🇷.
   if (isRegionalIndicator(chars[0]) && isRegionalIndicator(chars[1])) {
     const flag = chars[0] + chars[1]
-    return { flag, name: text.trim().slice(flag.length).trim() }
+    return { flag, name: trimmed.slice(flag.length).trim() }
   }
-  return { flag: '', name: text.trim() }
+  // Subdivision flag: 🏴 (U+1F3F4) + tag letters + a cancel tag (U+E007F),
+  // e.g. 🏴󠁧󠁢󠁳󠁣󠁴󠁿 (Scotland). Consume through the cancel tag.
+  if (cpOf(chars[0]) === 0x1f3f4) {
+    let end = 1
+    while (end < chars.length && cpOf(chars[end]) !== 0xe007f) end++
+    const flag = chars.slice(0, end + 1).join('')
+    return { flag, name: trimmed.slice(flag.length).trim() }
+  }
+  return { flag: '', name: trimmed }
 }
 
 // football-data live statuses (no HALF_TIME exists — the break is PAUSED).

@@ -6,6 +6,7 @@ import {
   computeCloseTime,
   flagEmoji,
   flagEmojiToCode,
+  teamFlagFromArea,
   FDMatch,
   TournamentConfig,
 } from './sports'
@@ -274,6 +275,36 @@ describe('flagEmojiToCode', () => {
     expect(flagEmojiToCode('')).toBe('')
     expect(flagEmojiToCode('KR')).toBe('') // plain letters, not the emoji
     expect(flagEmojiToCode('⚽')).toBe('')
+  })
+  it('decodes a subdivision tag sequence to a hyphenated flagcdn code', () => {
+    expect(flagEmojiToCode('🏴󠁧󠁢󠁳󠁣󠁴󠁿')).toBe('gb-sct') // Scotland
+    expect(flagEmojiToCode('🏴󠁧󠁢󠁥󠁮󠁧󠁿')).toBe('gb-eng') // England
+    expect(flagEmojiToCode('🏴󠁧󠁢󠁷󠁬󠁳󠁿')).toBe('gb-wls') // Wales
+  })
+  it('returns empty string for a bare black flag (no subdivision tags)', () => {
+    expect(flagEmojiToCode('🏴')).toBe('')
+  })
+})
+
+describe('teamFlagFromArea', () => {
+  it('emits subdivision flag emoji for UK home nations (round-trips to flagcdn)', () => {
+    // football-data delivers these as area codes / TLAs; both code schemes map
+    // to the same subdivision flag.
+    for (const [code, expected] of [
+      ['ENG', 'gb-eng'],
+      ['SCO', 'gb-sct'],
+      ['SCT', 'gb-sct'],
+      ['WAL', 'gb-wls'],
+    ] as const) {
+      expect(flagEmojiToCode(teamFlagFromArea(code))).toBe(expected)
+    }
+  })
+  it('falls back to the Union Jack for Northern Ireland (no flag emoji exists)', () => {
+    expect(teamFlagFromArea('NIR')).toBe(flagEmoji('GB'))
+  })
+  it('still maps ordinary teams to their country flag', () => {
+    expect(teamFlagFromArea('BRA')).toBe(flagEmoji('BR'))
+    expect(teamFlagFromArea('JPN')).toBe(flagEmoji('JP'))
   })
 })
 
